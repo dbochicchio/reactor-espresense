@@ -1,0 +1,28 @@
+# Copy and paste everything below (not including) the --- into the
+# "controllers" section of your reactor.yaml file.
+---
+
+  - id: espresense
+    name: ESPresense
+    implementation: ESPresenseController
+    enabled: true
+    config:
+      # MQTTController id under MSR: default is mqtt
+      #mqtt_controller: mqtt
+
+      # interval for update: default 5 secs
+      #interval: 5000
+
+      # timeout: default 60 secs
+      #timeout: 60000
+
+      # error_interval: default 10 secs
+      #error_interval: 10000
+
+      # rssi to consider after the device could be considered out of range: default -120
+      #rssiForHome: -120
+
+      devices:
+        - 'iBeacon:agcd-defg'
+        - 'daniele-iphone'
+        - 'noemi-iphone'
