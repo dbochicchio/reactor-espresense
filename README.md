@@ -57,9 +57,12 @@ controllers:
       # rssi to consider before the device is considered out of range: default 10 secs
       #rssiForHome: -100
 
+      # timeout after a device is considered dead - default 5 days
+      #purgeTimeout: 432000000 # 5 days
+
       devices:
         - 'iBeacon:agcd-defg'
-        - 'daniele-iphone'
+        - 'irk:abcd'
 ```
 
 Remember to add the ID of your devices under *devices* section. If devices are not added, they will not tracked. Each time a new device is added, a new entity will be automatically created. To get your device IDs, go to *http://stationIP/ui/#/fingerprints*.
@@ -73,6 +76,8 @@ Restart Reactor to make the changes take effect. After that, you should be able 
 Everytime your beacon/device is recognized, a new message will be sent to the MQTT broker. This will be used to update internal data (distance, rssi, rssi at 1 mt, speed) and the room it is in. If you're using multiple base stations, the room will be detected by analyzing the latest message, with the *distance* attribute being used to determine the nearest base station.
 
 Each *interval* msecs, the devices are analyzed to understand if they're still connected. If your beacon/device stops reporting, after *timeout* msecs, the device will be marked as *not_home*. Depending on your beacon/device, the next message will set the device in the correct room as soon as it's received. This is usually very fast for entering a room, and has some timeout when leaving. Program your reactions accordingly.
+
+After 5 days, a device is considered dead and marked for deletion. Adjust *purgeTimeout* in settings to support your needs.
 
 ## Support
 

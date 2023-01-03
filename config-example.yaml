@@ -22,7 +22,9 @@
       # rssi to consider after the device could be considered out of range: default -120
       #rssiForHome: -120
 
+      # timeout after a device is considered dead - default 5 days
+      #purgeTimeout: 432000000 # 5 days
+
       devices:
         - 'iBeacon:agcd-defg'
-        - 'daniele-iphone'
-        - 'noemi-iphone'
+        - 'irk:abcd'

@@ -1,6 +1,6 @@
 {
   "name": "reactor-espresense",
-  "version": "0.1.230102",
+  "version": "0.1.230103",
   "description": "Reactor Add-on: ESPresense",
   "homepage": "https://github.com/dbochicchio/reactor-espresense",
   "main": "./ESPresenseController.js",

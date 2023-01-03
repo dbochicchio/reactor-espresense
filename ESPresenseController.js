@@ -4,7 +4,7 @@
  *  More info: https://github.com/dbochicchio/reactor-espresense
  */
 
-const version = 230102;
+const version = 230103;
 const className = "espresense";
 const ns = "x_espresense"
 const ignoredValue = "@@IGNORED@@"
@@ -52,8 +52,30 @@ module.exports = class ESPresenseController extends Controller {
 
         this.devices = this.config.devices || [];
 
-        this.log.notice("%1 [run] devices: - %2", this, this.devices90);
+        this.log.notice("%1 [run] devices: - %2", this, this.devices);
         this.run();
+
+        // mark other entities as dead
+        var entities = this.getEntities();
+        for (let [eid, e] of Object.entries(entities)) {
+            let markDead = true;
+            var lastupdate = e.getAttribute(`${ns}.lastupdate`);
+            if (lastupdate !== undefined)
+                markDead = Date.now() - lastupdate > (this.config.purgeTimeout || (86400000 * 5)); // 5 day
+
+            // no need to mark controllers/groups as dead
+            if (eid == 'controller_all' || eid == 'system')
+                markDead = false;
+
+            e.markDead(markDead);
+            this.log.debug(5, "%1 [MarkDead] %2 - Dead: %3", this, eid, markDead);
+
+            if (markDead) {
+                this.log.notice("%1 device %2 no longer available, marking %3 for removal", this, id, e);
+                this.sendWarning("Controller {0} device {1:q} ({2}) no longer exists.", this.getID(), id, e.getName());
+            }
+        }
+        this.purgeDeadEntities();
 
         return this;
     }
@@ -88,11 +110,11 @@ module.exports = class ESPresenseController extends Controller {
 
         // analyze status and set devices as offline
         this.devices.forEach(device => {
-            let e = this.findEntity(device);
+            let e = this.findEntity(this.normalizeId(device));
             if (e != undefined) {
                 var lastupdate = e.getAttribute(`${ns}.lastupdate`);
                 var expired = Date.now() - lastupdate > (this.config.timeout || 60_000);
-                this.log.notice("%1 [check] %2 - lastupdate: %3 - expired: %4", this, device, lastupdate, expired);
+                this.log.debug(5, "%1 [check] %2 - lastupdate: %3 - expired: %4", this, device, lastupdate, expired);
                 if (expired) {
                     this.updateEntityAttributes(e, {
                         "presence_sensor.state": false,
@@ -115,7 +137,7 @@ module.exports = class ESPresenseController extends Controller {
                 this.mqttController = this.getStructure().getControllerByID(mqttControllerId);
 
                 if (this.mqttController !== undefined) {
-                    this.log.notice("%1 [registerMqttController] MQTT topic subscription in progress for %2", this, mqttControllerId);
+                    this.log.debug(5, "%1 [registerMqttController] MQTT topic subscription in progress for %2", this, mqttControllerId);
 
                     // subscribe to updates for each registered device
                     this.devices.forEach(device => {
@@ -149,7 +171,7 @@ module.exports = class ESPresenseController extends Controller {
             var id = device.id;
 
             if (this.devices.includes(id)) {
-                let e = this.findEntity(id);
+                let e = this.findEntity(this.normalizeId(id));
                 let room = topic.split('/').slice(-1)[0].toLowerCase();
 
                 // device not found: let's create it
@@ -186,7 +208,7 @@ module.exports = class ESPresenseController extends Controller {
                     .filter(x => Date.now() - x.lastupdate < (this.config.timeout || 60_000))
                     // then by best proximity
                     .reduce((prev, curr) =>
-                        (curr.distance > prev.distance && curr.lastupdate > prev.lastupdate) ? curr: prev
+                        (curr.distance > prev.distance && curr.lastupdate > prev.lastupdate) ? curr : prev
                     ) ?? currentRawData;
 
                 // update device using the most current status
@@ -237,12 +259,12 @@ module.exports = class ESPresenseController extends Controller {
     mapDevice(id, name, capabilities, defaultAttribute, attributes) {
         this.log.debug(5, "%1 mapDevice(%2, %3, %4, %5, %6)", this, id, name, capabilities, defaultAttribute, attributes);
 
-        let e = this.findEntity(id);
+        let e = this.findEntity(this.normalizeId(id));
 
         try {
             if (!e) {
                 this.log.notice("%1 Creating new entity for %2", this, name);
-                e = this.getEntity(className, id);
+                e = this.getEntity(className, this.normalizeId(id));
                 e.setName(name);
                 e.setType(className);
             }
@@ -289,7 +311,7 @@ module.exports = class ESPresenseController extends Controller {
                     var changed = value != newValue && JSON.stringify(value) != JSON.stringify(newValue);
                     if (changed) {
                         var id = e.getCanonicalID();
-                        this.log.notice("%1 [%2] %3: %4 => %5", this, id, attrName, newValue, value);
+                        this.log.debug(7, "%1 [%2] %3: %4 => %5", this, id, attrName, newValue, value);
                         e.setAttribute(attrName, newValue);
                     }
                 }
@@ -297,4 +319,7 @@ module.exports = class ESPresenseController extends Controller {
         }
     }
 
+    normalizeId(id) {
+        return id.replace(/:/gi, '_').replace(/-/gi, '_').toLowerCase();
+    }
 };
