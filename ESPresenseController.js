@@ -72,7 +72,7 @@ module.exports = class ESPresenseController extends Controller {
 
             if (markDead) {
                 this.log.notice("%1 device %2 no longer available, marking %3 for removal", this, id, e);
-                this.sendWarning("Controller {0} device {1:q} ({2}) no longer exists.", this.getID(), id, e.getName());
+                this.sendWarning("Controller {0} device {1:q} ({2}) no longer exists.", this.getID(), eid, e.getName());
             }
         }
         this.purgeDeadEntities();
