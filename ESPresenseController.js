@@ -4,12 +4,14 @@
  *  More info: https://github.com/dbochicchio/reactor-espresense
  */
 
-const version = 230103;
+const version = 25313;
 const className = "espresense";
 const ns = "x_espresense"
 const ignoredValue = "@@IGNORED@@"
+const defaultTimeout = 60_000;
 
 const Controller = require("server/lib/Controller");
+const Capabilities = require("server/lib/Capabilities");
 
 const Logger = require("server/lib/Logger");
 Logger.getLogger('ESPresenseController', 'Controller').always("Module ESPresenseController v%1", version);
@@ -17,10 +19,7 @@ Logger.getLogger('ESPresenseController', 'Controller').always("Module ESPresense
 const Configuration = require("server/lib/Configuration");
 const logsdir = Configuration.getConfig("reactor.logsdir");  /* logs directory path if you need it */
 
-// modules
 const util = require("server/lib/util");
-
-const delay = ms => new Promise(res => setTimeout(res, ms));
 
 var impl = false;  /* Implementation data, one copy for all instances, will be loaded by start() later */
 
@@ -61,7 +60,7 @@ module.exports = class ESPresenseController extends Controller {
             let markDead = true;
             var lastupdate = e.getAttribute(`${ns}.lastupdate`);
             if (lastupdate !== undefined)
-                markDead = Date.now() - lastupdate > (this.config.purgeTimeout || (86400000 * 5)); // 5 day
+                markDead = Date.now() - lastupdate > (this.config.purgeTimeout || (432_000_000)); // 5 days
 
             // no need to mark controllers/groups as dead
             if (eid == 'controller_all' || eid == 'system')
@@ -113,7 +112,7 @@ module.exports = class ESPresenseController extends Controller {
             let e = this.findEntity(this.normalizeId(device));
             if (e != undefined) {
                 var lastupdate = e.getAttribute(`${ns}.lastupdate`);
-                var expired = Date.now() - lastupdate > (this.config.timeout || 60_000);
+                var expired = Date.now() - lastupdate > (this.config.timeout || defaultTimeout);
                 this.log.debug(5, "%1 [check] %2 - lastupdate: %3 - expired: %4", this, device, lastupdate, expired);
                 if (expired) {
                     this.updateEntityAttributes(e, {
@@ -164,7 +163,7 @@ module.exports = class ESPresenseController extends Controller {
     onMqttMessage(topic, value) {
         this.log.debug(5, "%1 [onMqttMessage] %2: %3", this, topic, value);
 
-        var rssiForHome = parseFloat(this.config.rssiForHome ?? -120);
+        var rssiForPresence = parseFloat(this.config.rssiForPresence ?? -120);
 
         if (topic.startsWith('espresense/devices/') && (value || '') !== '') {
             var device = JSON.parse(value);
@@ -202,20 +201,21 @@ module.exports = class ESPresenseController extends Controller {
                 let data = rawdata.filter(x => x.room != room);
                 data.unshift(currentRawData);
 
+                var tolerance = 10_000;
                 // get nearest and most current data from rooms
                 let currentStatus = data
                     // first get current data
-                    .filter(x => Date.now() - x.lastupdate < (this.config.timeout || 60_000))
+                    .filter(x => Date.now() - x.lastupdate < (this.config.timeout || defaultTimeout))
                     // then by best proximity
                     .reduce((prev, curr) =>
-                        (curr.distance > prev.distance && curr.lastupdate > prev.lastupdate) ? curr : prev
+                        (curr.distance < prev.distance && curr.lastupdate > prev.lastupdate - tolerance) ? curr : prev
                     ) ?? currentRawData;
 
                 // update device using the most current status
                 this.updateEntityAttributes(e, {
                     "_ns_.rawdata": data,
-                    "presence_sensor.state": currentStatus.rssi >= rssiForHome,
-                    "string_sensor.value": currentStatus.rssi >= rssiForHome ? currentStatus.room : 'not_home',
+                    "presence_sensor.state": currentStatus.rssi >= rssiForPresence,
+                    "string_sensor.value": currentStatus.rssi >= rssiForPresence ? currentStatus.room : 'not_home',
                     "_ns_.rssi": currentStatus.rssi,
                     "_ns_.raw": currentStatus.raw,
                     "_ns_.distance": currentStatus.distance,
@@ -275,12 +275,15 @@ module.exports = class ESPresenseController extends Controller {
             // capabilities
             if (capabilities) {
                 this.log.debug(5, "%1 [%2] adding capabilities: %3", this, id, capabilities);
-                capabilities.forEach(c => {
-                    if (!e.hasCapability(c)) {
-                        this.log.debug(5, "%1 [%2] adding capability %3", this, id, c);
-                        e.extendCapability(c);
-                    }
-                });
+                e.extendCapabilities(capabilities);
+
+                // Check controller and system capabilities versions for changes
+                const vinfo = { ...Capabilities.getSysInfo(), controller: version };
+                const hash = util.hash(JSON.stringify(vinfo));
+                if (e._hash !== hash) {
+                    e.refreshCapabilities();
+                    e._hash = hash;
+                }
             }
 
             this.updateEntityAttributes(e, attributes);
@@ -298,6 +301,9 @@ module.exports = class ESPresenseController extends Controller {
 
     updateEntityAttributes(e, attributes) {
         if (e && attributes) {
+			e.deferNotifies(true);
+			e.markDead(false);
+
             for (const attr in attributes) {
                 var newValue = attributes[attr];
 
@@ -315,7 +321,9 @@ module.exports = class ESPresenseController extends Controller {
                         e.setAttribute(attrName, newValue);
                     }
                 }
-            };
+            }
+
+			e.markDead(false);
         }
     }
 

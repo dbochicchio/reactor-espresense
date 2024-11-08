@@ -55,7 +55,7 @@ controllers:
       #error_interval: 10000
 
       # rssi to consider before the device is considered out of range: default 10 secs
-      #rssiForHome: -100
+      #rssiForPresence: -120
 
       # timeout after a device is considered dead - default 5 days
       #purgeTimeout: 432000000 # 5 days
