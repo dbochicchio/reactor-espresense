@@ -4,7 +4,7 @@
  *  More info: https://github.com/dbochicchio/reactor-espresense
  */
 
-const version = 25313;
+const version = 24313;
 const className = "espresense";
 const ns = "x_espresense"
 const ignoredValue = "@@IGNORED@@"
